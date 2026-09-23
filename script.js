@@ -107,14 +107,29 @@ function validPhone(value) { return /^[0-9+\s()-]{9,15}$/.test(value.trim()); }
 
 function initNavigation() {
   const toggle = $(".menu-toggle"), menu = $("#primary-menu");
-  toggle.addEventListener("click", () => {
-    const open = menu.classList.toggle("open");
+  const syncMenuState = (open) => {
+    menu.classList.toggle("open", open);
     toggle.setAttribute("aria-expanded", String(open));
     toggle.setAttribute("aria-label", open ? "Close navigation menu" : "Open navigation menu");
+    document.body.classList.toggle("menu-open", open);
+  };
+
+  toggle.addEventListener("click", () => {
+    syncMenuState(!menu.classList.contains("open"));
   });
+
+  document.addEventListener("click", (event) => {
+    const clickedInsideMenu = menu.contains(event.target);
+    const clickedToggle = toggle.contains(event.target);
+    if (!clickedInsideMenu && !clickedToggle) {
+      syncMenuState(false);
+    }
+  });
+
   $$(".nav-link").forEach(link => link.addEventListener("click", () => {
-    menu.classList.remove("open"); toggle.setAttribute("aria-expanded","false");
+    syncMenuState(false);
   }));
+
   const sections = $$("main section[id]");
   const links = $$(".nav-link");
   const observer = new IntersectionObserver(entries => entries.forEach(entry => {
@@ -188,6 +203,7 @@ function initFAQ() {
 
 function initTheme() {
   const button = $(".theme-toggle");
+  const backTop = $("#back-top");
   const saved = localStorage.getItem("reflite-theme");
   if (saved === "dark") document.documentElement.dataset.theme = "dark";
 
@@ -197,6 +213,12 @@ function initTheme() {
     button.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
     button.setAttribute("aria-pressed", String(dark));
     button.title = dark ? "Switch to light theme" : "Switch to dark theme";
+
+    if (backTop) {
+      backTop.classList.toggle("theme-dark", dark);
+      backTop.setAttribute("aria-label", dark ? "Back to top" : "Back to top");
+      backTop.title = dark ? "Back to top" : "Back to top";
+    }
   };
 
   update();
