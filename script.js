@@ -107,6 +107,8 @@ function validPhone(value) { return /^[0-9+\s()-]{9,15}$/.test(value.trim()); }
 
 function initNavigation() {
   const toggle = $(".menu-toggle"), menu = $("#primary-menu");
+  if (!toggle || !menu) return;
+
   const syncMenuState = (open) => {
     menu.classList.toggle("open", open);
     toggle.setAttribute("aria-expanded", String(open));
@@ -114,7 +116,8 @@ function initNavigation() {
     document.body.classList.toggle("menu-open", open);
   };
 
-  toggle.addEventListener("click", () => {
+  toggle.addEventListener("click", (event) => {
+    event.stopPropagation();
     syncMenuState(!menu.classList.contains("open"));
   });
 
@@ -129,6 +132,10 @@ function initNavigation() {
   $$(".nav-link").forEach(link => link.addEventListener("click", () => {
     syncMenuState(false);
   }));
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 800) syncMenuState(false);
+  });
 
   const sections = $$("main section[id]");
   const links = $$(".nav-link");
