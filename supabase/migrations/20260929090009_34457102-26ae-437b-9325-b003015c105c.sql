@@ -1,0 +1,1 @@
+DELETE FROM public.testimonials WHERE name = 'Test Visitor';
