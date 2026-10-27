@@ -1,0 +1,1 @@
+Place your Reflite Cyberspace logo and business photos in this folder. The website currently uses a CSS technology visual, so no remote images are required.
