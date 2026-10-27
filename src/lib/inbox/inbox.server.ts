@@ -16,29 +16,44 @@ export type IncomingMessage = {
 export async function saveMessages(rows: IncomingMessage[]) {
   if (rows.length === 0) return 0;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { error, count } = await supabaseAdmin
-    .from("inbox_messages")
-    .upsert(rows.map(({ received_at, ...r }) => (received_at ? { ...r, received_at } : r)), { onConflict: "channel,external_id", ignoreDuplicates: true, count: "exact" });
+  const { error, count } = await supabaseAdmin.from("inbox_messages").upsert(
+    rows.map(({ received_at, ...r }) => (received_at ? { ...r, received_at } : r)),
+    { onConflict: "channel,external_id", ignoreDuplicates: true, count: "exact" },
+  );
   if (error) throw new Error(error.message);
   return count ?? rows.length;
 }
 
 // ---------- Gmail ----------
-const GMAIL = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
+const GMAIL = "https://gmail.googleapis.com/gmail/v1";
 
-function gmailHeaders() {
-  const lovable = process.env["LOVABLE_API_KEY"];
-  const gmail = process.env["GOOGLE_MAIL_API_KEY"];
-  if (!lovable || !gmail) throw new Error("Gmail is not connected");
+async function gmailHeaders() {
+  const clientId = process.env["GOOGLE_CLIENT_ID"];
+  const clientSecret = process.env["GOOGLE_CLIENT_SECRET"];
+  const refreshToken = process.env["GOOGLE_REFRESH_TOKEN"];
+  if (!clientId || !clientSecret || !refreshToken) throw new Error("Gmail is not connected");
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  if (!tokenResponse.ok) throw new Error("Could not authorize Gmail access");
+  const { access_token: accessToken } = (await tokenResponse.json()) as { access_token: string };
   return {
-    Authorization: `Bearer ${lovable}`,
-    "X-Connection-Api-Key": gmail,
+    Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
   };
 }
 
 async function gmailFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`${GMAIL}${path}`, { ...init, headers: gmailHeaders() });
+  const headers = new Headers(await gmailHeaders());
+  new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+  const res = await fetch(`${GMAIL}${path}`, { ...init, headers });
   if (!res.ok) {
     const text = await res.text();
     console.error(`Gmail request failed [${res.status}]: ${text}`);
@@ -70,7 +85,8 @@ export async function syncGmailInbox() {
     const m = (await gmailFetch(
       `/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
     )) as GmailMsg;
-    const h = (n: string) => m.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
+    const h = (n: string) =>
+      m.payload?.headers?.find((x) => x.name.toLowerCase() === n)?.value ?? "";
     const from = parseFrom(h("from"));
     rows.push({
       channel: "email",
@@ -88,9 +104,17 @@ export async function syncGmailInbox() {
 
 const b64 = (s: string) =>
   btoa(Array.from(new TextEncoder().encode(s), (b) => String.fromCharCode(b)).join(""));
-const header = (v: string) => (/^[\x00-\x7F]*$/.test(v) ? v : `=?UTF-8?B?${b64(v)}?=`);
+const header = (value: string) =>
+  Array.from(value).every((character) => character.codePointAt(0)! <= 0x7f)
+    ? value
+    : `=?UTF-8?B?${b64(value)}?=`;
 
-export async function sendGmail(opts: { to: string; subject: string; body: string; threadId?: string | null }) {
+export async function sendGmail(opts: {
+  to: string;
+  subject: string;
+  body: string;
+  threadId?: string | null;
+}) {
   const subject = /^re:/i.test(opts.subject) ? opts.subject : `Re: ${opts.subject}`;
   const raw = [
     `To: ${opts.to}`,
@@ -108,29 +132,21 @@ export async function sendGmail(opts: { to: string; subject: string; body: strin
 }
 
 // ---------- AI drafts ----------
-export async function draftAiReply(msg: { from_name: string | null; subject: string | null; body: string; channel: string }) {
-  const apiKey = process.env["LOVABLE_API_KEY"];
+export async function draftAiReply(msg: {
+  from_name: string | null;
+  subject: string | null;
+  body: string;
+  channel: string;
+}) {
+  const apiKey = process.env["OPENAI_API_KEY"];
   if (!apiKey) throw new Error("AI is not configured");
-  const provider = createOpenAI({
-    baseURL: "https://ai.gateway.lovable.dev/v1",
-    apiKey,
-    headers: { "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-  });
+  const provider = createOpenAI({ apiKey });
   const services = SERVICE_GROUPS.flatMap((g) => g.items.map((i) => i.name)).join(", ");
   const result = streamText({
-    model: provider.responses("openai/gpt-6-astra"),
+    model: provider("gpt-4.1-mini"),
     system: `You write replies on behalf of ${COMPANY.name} (${COMPANY.location}). Services: ${services}. Phone ${COMPANY.phone}, email ${COMPANY.email}.
 Write a short, warm, professional reply to the customer message. Never invent prices, opening hours or turnaround times — say the team will confirm. Sign off as "The Reflite Team". Output only the reply text.`,
     prompt: `Channel: ${msg.channel}\nFrom: ${msg.from_name ?? "Customer"}\nSubject: ${msg.subject ?? ""}\n\n${msg.body}`,
-    providerOptions: {
-      openai: {
-        forceReasoning: true,
-        reasoningEffort: "low",
-        reasoningSummary: "auto",
-        store: false,
-        include: ["reasoning.encrypted_content"],
-      },
-    },
   });
   return (await result.text).trim();
 }

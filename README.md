@@ -1,29 +1,16 @@
-# Welcome to your Lovable project
+# Reflite Technologies
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+Company website and staff inbox built with TanStack Start, React, TypeScript, Tailwind CSS, and Supabase.
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Requirements: Node.js and npm.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+npm install
 npm run dev
 ```
 
-## Built with
+Copy `.env.example` to `.env` and set credentials for your Supabase project, OpenAI API account, and Google Gmail integration. Configure Google as an OAuth provider in Supabase for staff sign-in. Gmail inbox sync and sending use a Google OAuth refresh token with Gmail API access; the Supabase Google sign-in setup is separate.
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+Run `npm run lint` and `npm run build` to validate changes.
